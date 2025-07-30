@@ -1,0 +1,13 @@
+{
+  "name": "nethro-bot-2026",
+  "version": "1.0.0",
+  "description": "Bot de WhatsApp con flow chévere 😎",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.0",
+    "pino": "^8.0.0"
+  }
+}
