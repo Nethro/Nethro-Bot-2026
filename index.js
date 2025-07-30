@@ -1,79 +1,73 @@
-const { default: makeWASocket, DisconnectReason } = require("@whiskeysockets/baileys");
-const { useRemoteFileAuthState } = require("@adiwajshing/baileys-auth");
-const pino = require("pino");
-const readline = require("readline");
-const fs = require("fs");
+const {
+  default: makeWASocket,
+  DisconnectReason,
+  useMultiFileAuthState,
+  makeCacheableSignalKeyStore,
+  fetchLatestBaileysVersion
+} = require('@whiskeysockets/baileys');
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+const pino = require('pino');
+const path = require('path');
+const fs = require('fs');
 
-const ask = (text) => new Promise((resolve) => rl.question(text, resolve));
+// Ruta de autenticación
+const authFolder = './session';
 
-async function start() {
-  console.clear();
-  console.log("🟢 Iniciando Nethro-Bot-2026...");
+// Iniciar conexión
+async function connectBot() {
+  const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
-  if (!fs.existsSync("./session")) fs.mkdirSync("./session");
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  console.log(`Usando Baileys v${version.join('.')} ${isLatest ? '(última versión)' : ''}`);
 
-  const { state, saveCreds } = await useRemoteFileAuthState({
-    credsPath: "./session",
-    browser: ["NethroBot", "Termux", "1.0"]
+  const socket = makeWASocket({
+    version,
+    logger: pino({ level: 'silent' }),
+    printQRInTerminal: true,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
+    },
+    browser: ['Nethro-Bot-2026', 'Safari', '1.0.0']
   });
 
-  const sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false,
-    browser: ["NethroBot-Termux", "Linux", "1.0.0"],
-    logger: pino({ level: "silent" }),
-  });
+  socket.ev.on('creds.update', saveCreds);
 
-  sock.ev.on("creds.update", saveCreds);
-
-  sock.ev.on("connection.update", async (update) => {
+  socket.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
 
-    if (connection === "open") {
-      console.log("✅ Bot conectado bro 😎 ¡Todo chido!");
+    if (connection === 'open') {
+      console.log('✅ ¡Bot conectado exitosamente!');
     }
 
-    if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log("❌ Desconectado. Reintentando:", shouldReconnect);
-      if (shouldReconnect) start();
-    }
-  });
-
-  // Ejemplo de respuesta
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const m = messages[0];
-    if (!m.message || m.key.fromMe) return;
-
-    const text = m.message.conversation || "";
-    const jid = m.key.remoteJid;
-
-    if (text.toLowerCase().startsWith(".hola")) {
-      await sock.sendMessage(jid, { text: "😎 ¡Qué onda bro! Nethro-Bot activo 💥" });
+    if (connection === 'close') {
+      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log('❌ Conexión cerrada. Reintentando:', shouldReconnect);
+      if (shouldReconnect) {
+        connectBot();
+      } else {
+        console.log('⛔ Sesión cerrada. Escanea de nuevo o elimina la carpeta "session".');
+      }
     }
   });
 
-  // Si aún no estás registrado, te pide código SMS
-  if (!state.creds.registered) {
-    const phoneNumber = await ask("📱 Ingresa tu número (ej: 51987654321): ");
-    const { registration } = await sock.requestRegistrationCode({
-      phoneNumber,
-      method: "sms"
-    });
+  socket.ev.on('messages.upsert', async (m) => {
+    const msg = m.messages[0];
+    if (!msg.message || msg.key.fromMe) return;
 
-    console.log("📩 Código enviado por SMS");
+    const from = msg.key.remoteJid;
+    const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+    const command = body.trim().toLowerCase();
 
-    const code = await ask("🔢 Ingresa el código recibido: ");
-    await sock.register(code);
-    console.log("✅ Registro exitoso bro 🐱‍👤");
-    rl.close();
-  }
+    // Comando de prueba
+    if (command === '.menu') {
+      await socket.sendMessage(from, {
+        text: `👋 ¡Qué onda bro! Aquí están los comandos disponibles:\n\n• .menu\n• .kick\n• .setwelcome\n• .todos\n• .nethrolive\n• .infodecreador`
+      });
+    }
+  });
 }
 
-start();
+// Inicia el bot
+connectBot();
+
