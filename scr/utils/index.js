@@ -187,3 +187,13 @@ exports.getRandomName = (ext = "") => {
 
 /** 📖 Leer más (anti-spam visual) */
 exports.readMore = () => "\u200B".repeat(950);
+};
+
+sock.ev.on("group-participants.update", async (update) => {
+  try {
+    await require("./handlers/welcome")({ socket: sock, update });
+  } catch (err) {
+    console.error("💥 Error en bienvenida:", err);
+  }
+});
+
